@@ -1,26 +1,119 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* Werewolf Gothic Colors */
+  --color-spooky-black: #050508;
+  --color-spooky-purple: #110924;
+  --color-spooky-indigo: #0d1127;
+  --color-moon-glow: #c084fc;
+  --color-werewolf-red: #ef4444;
+  --color-werewolf-crimson: #991b1b;
+  --color-werewolf-gold: #fbbf24;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Custom Fonts */
+  --font-cinzel: var(--font-cinzel), serif;
+  --font-sans: var(--font-jakarta), sans-serif;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* Custom Animations */
+  --animate-moon-pulse: moon-pulse 6s ease-in-out infinite;
+  --animate-fog-slow: fog-move 120s linear infinite;
+  --animate-fog-fast: fog-move 80s linear infinite;
+  --animate-pulse-glow: pulse-glow 3s infinite ease-in-out;
+  --animate-ember-float-1: ember-float 16s ease-in-out infinite;
+  --animate-ember-float-2: ember-float 22s ease-in-out infinite 3s;
+  --animate-ember-float-3: ember-float 18s ease-in-out infinite 6s;
+
+  @keyframes moon-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      filter: drop-shadow(0 0 15px rgba(192, 132, 252, 0.4)) blur(2px);
+      opacity: 0.85;
+    }
+    50% {
+      transform: scale(1.05);
+      filter: drop-shadow(0 0 45px rgba(192, 132, 252, 0.85)) blur(0px);
+      opacity: 1;
+    }
+  }
+
+  @keyframes fog-move {
+    0% {
+      transform: translate3d(0, 0, 0);
+    }
+    100% {
+      transform: translate3d(-50%, 0, 0);
+    }
+  }
+
+  @keyframes pulse-glow {
+    0%,
+    100% {
+      text-shadow:
+        0 0 8px rgba(192, 132, 252, 0.5),
+        0 0 15px rgba(192, 132, 252, 0.3);
+    }
+    50% {
+      text-shadow:
+        0 0 18px rgba(192, 132, 252, 0.95),
+        0 0 30px rgba(239, 68, 68, 0.6);
+    }
+  }
+
+  @keyframes ember-float {
+    0% {
+      transform: translateY(105vh) translateX(0) scale(0.8) rotate(0deg);
+      opacity: 0;
+    }
+    10% {
+      opacity: 0.6;
+    }
+    90% {
+      opacity: 0.6;
+    }
+    100% {
+      transform: translateY(-5vh) translateX(80px) scale(0.4) rotate(360deg);
+      opacity: 0;
+    }
   }
 }
 
+/* Custom Base Styles */
+:root {
+  --background: #050508;
+  --foreground: #f3f4f6;
+}
+
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbar for Spooky Experience */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050508;
+}
+::-webkit-scrollbar-thumb {
+  background: #271c42;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ef4444;
+}
+
+/* Text glow helper utility */
+.text-shadow-glow {
+  text-shadow:
+    0 0 10px rgba(192, 132, 252, 0.6),
+    0 0 20px rgba(192, 132, 252, 0.4);
+}
+
+.text-shadow-red-glow {
+  text-shadow:
+    0 0 10px rgba(239, 68, 68, 0.6),
+    0 0 20px rgba(239, 68, 68, 0.4);
 }
