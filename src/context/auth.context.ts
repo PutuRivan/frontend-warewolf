@@ -9,6 +9,8 @@ export interface User {
   avatar?: string;
   level?: number;
   exp?: number;
+  point?: number;
+  coin?: number;
 }
 
 export interface LoginData {

@@ -21,10 +21,11 @@ import type React from "react";
 import { useState } from "react";
 import { useGameStore } from "@/lib/store/useGameStore";
 import GlassPanel from "@/components/ui/glass-panel";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function LobbyView() {
   const user = useGameStore((state) => state.user);
-  const logout = useGameStore((state) => state.logout);
+  const { logout } = useAuth();
   const createRoom = useGameStore((state) => state.createRoom);
   const joinRoom = useGameStore((state) => state.joinRoom);
   const setView = useGameStore((state) => state.setView);
@@ -42,6 +43,7 @@ export default function LobbyView() {
   const [roomPassword, setRoomPassword] = useState("");
   const [createError, setCreateError] = useState("");
   const [showConfig, setShowConfig] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +109,7 @@ export default function LobbyView() {
           </button>
           <button
             type="button"
-            onClick={logout}
+            onClick={() => setShowLogoutConfirm(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-700/50 bg-zinc-800/10 text-zinc-400 hover:text-white hover:bg-zinc-800/40 hover:border-zinc-500/50 text-sm font-semibold transition-all cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
@@ -164,12 +166,12 @@ export default function LobbyView() {
               <div className="bg-spooky-black/40 border border-purple-500/10 rounded-lg p-3 space-y-1.5">
                 <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-400">
                   <span>Experience (XP)</span>
-                  <span>{user?.exp} / 100 XP</span>
+                  <span>{user?.exp ? (user.exp % 200) : 0} / 200 XP</span>
                 </div>
                 <div className="w-full h-1.5 bg-spooky-black/80 rounded-full overflow-hidden border border-purple-500/5">
                   <div
                     className="h-full bg-purple-500"
-                    style={{ width: `${user?.exp || 0}%` }}
+                    style={{ width: `${user?.exp ? ((user.exp % 200) / 200) * 100 : 0}%` }}
                   />
                 </div>
               </div>
@@ -449,6 +451,46 @@ export default function LobbyView() {
           </GlassPanel>
         </div>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="max-w-sm w-full animate-scale-up animate-duration-200">
+            <GlassPanel className="border-werewolf-red/35 py-8 px-6 space-y-6 text-center bg-gradient-to-b from-spooky-black to-werewolf-red/5">
+              <div className="w-14 h-14 rounded-full bg-werewolf-red/10 border border-werewolf-red/35 flex items-center justify-center mx-auto text-werewolf-red animate-pulse">
+                <LogOut className="w-6 h-6" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-cinzel font-bold text-xl text-white tracking-wider">
+                  LEAVE THE FOREST?
+                </h3>
+                <p className="text-zinc-400 text-xs leading-relaxed">
+                  Are you sure you want to return to the outskirts? Your active session will be ended.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 py-3 rounded-xl border border-zinc-700/80 bg-zinc-800/20 text-zinc-400 hover:text-white hover:bg-zinc-800/40 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLogoutConfirm(false);
+                    logout();
+                  }}
+                  className="flex-1 py-3 rounded-xl border border-werewolf-red/30 bg-werewolf-red/10 text-werewolf-red hover:bg-werewolf-red/20 hover:border-werewolf-red/50 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Exit
+                </button>
+              </div>
+            </GlassPanel>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -32,7 +32,7 @@ export default function AuthView() {
   const router = useRouter()
 
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -45,16 +45,25 @@ export default function AuthView() {
         setError("Passwords do not match");
         return;
       }
-      register({ username: username.trim(), email: email.trim(), password });
-    } else {
-      const response = login({ email: email.trim(), password });
-
-      if (!response) {
-        setError("Gagal Login")
+      try {
+        await register({ username: username.trim(), email: email.trim(), password });
+        setView("lobby");
+      } catch (err: any) {
+        setError(err.message || "Failed to join the pack. Try again.");
       }
-
-      // router.push("/")
-      setView("lobby")
+    } else {
+      try {
+        const success = await login({ email: email.trim(), password });
+        if (success === true) {
+          setView("lobby");
+        } else if (success instanceof Error) {
+          setError(success.message);
+        } else {
+          setError("Gagal login. Periksa kembali email dan password.");
+        }
+      } catch (err: any) {
+        setError(err.message || "User tidak ditemukan atau password salah!");
+      }
     }
   };
 

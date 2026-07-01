@@ -9,26 +9,44 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
 export function setAccessToken(token: string) {
   accessToken = token;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("access_token", token);
+  }
 }
 
 export function getAccessToken() {
+  if (!accessToken && typeof window !== "undefined") {
+    accessToken = localStorage.getItem("access_token");
+  }
   return accessToken;
 }
 
 export function clearAccessToken() {
   accessToken = null;
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("access_token");
+  }
 }
 
 export function setRefreshToken(token: string) {
   refreshToken = token;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("refresh_token", token);
+  }
 }
 
 export function getRefreshToken() {
+  if (!refreshToken && typeof window !== "undefined") {
+    refreshToken = localStorage.getItem("refresh_token");
+  }
   return refreshToken;
 }
 
 export function clearRefreshToken() {
   refreshToken = null;
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("refresh_token");
+  }
 }
 
 // =========================
@@ -43,8 +61,9 @@ export async function request(
     "Content-Type": "application/json",
   };
 
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
+  const token = getAccessToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const response = await fetch(`${API_URL}${endpoint}`, {
@@ -113,14 +132,15 @@ export async function getMe() {
 // =========================
 
 export async function refresh() {
-  if (!refreshToken) {
+  const token = getRefreshToken();
+  if (!token) {
     throw new Error("Refresh token tidak tersedia.");
   }
 
   const result = await request("/auth/refresh", {
     method: "POST",
     body: JSON.stringify({
-      refreshToken,
+      refreshToken: token,
     }),
   });
 
