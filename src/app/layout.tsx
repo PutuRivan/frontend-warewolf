@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Cinzel, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import AuthProvider from "@/provider/auth-provider";
 
 const cinzel = Cinzel({
   variable: "--font-cinzel",
@@ -31,7 +32,9 @@ export default function RootLayout({
       className={`${cinzel.variable} ${jakarta.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col font-sans bg-spooky-black text-zinc-100 overflow-x-hidden selection:bg-werewolf-red/30 selection:text-white">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
