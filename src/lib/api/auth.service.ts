@@ -35,7 +35,7 @@ export function clearRefreshToken() {
 // REQUEST
 // =========================
 
-async function request(
+export async function request(
   endpoint: string,
   options: RequestInit = {}
 ) {

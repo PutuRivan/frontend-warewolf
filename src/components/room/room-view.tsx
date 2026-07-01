@@ -15,7 +15,7 @@ import {
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { type ChatType, useGameStore } from "@/lib/store/useGameStore";
-import GlassPanel from "../GlassPanel";
+import GlassPanel from "@/components/ui/glass-panel";
 
 interface Role {
   name: string;

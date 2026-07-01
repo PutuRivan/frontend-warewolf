@@ -6,17 +6,21 @@ import {
   Coins,
   Key,
   Lock as LockIcon,
-  LogOut,
+  LogIn,
+  Mail,
   Plus,
-  ShieldAlert,
-  Trophy,
+  User,
+  UserPlus,
   Unlock,
   Users,
+  Trophy,
+  LogOut,
+  ShieldAlert,
 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
 import { useGameStore } from "@/lib/store/useGameStore";
-import GlassPanel from "../GlassPanel";
+import GlassPanel from "@/components/ui/glass-panel";
 
 export default function LobbyView() {
   const user = useGameStore((state) => state.user);

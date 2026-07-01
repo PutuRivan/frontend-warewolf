@@ -6,8 +6,8 @@ import {
   ReactNode,
 } from "react";
 
-import { AuthContext, User, LoginData, RegisterData } from "../context/auth-context";
-import * as authService from "@/service/auth.service";
+import { AuthContext, User, LoginData, RegisterData } from "../context/auth.context";
+import * as authService from "@/lib/api/auth.service";
 
 interface Props {
   children: ReactNode;

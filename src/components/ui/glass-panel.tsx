@@ -13,6 +13,7 @@ export default function GlassPanel({
 }: GlassPanelProps) {
   return (
     <div
+      suppressHydrationWarning={true}
       className={`
         relative backdrop-blur-md bg-spooky-black/60 border border-purple-500/20 rounded-2xl p-6 md:p-8
         shadow-[0_8px_32px_0_rgba(17,9,36,0.5)] 

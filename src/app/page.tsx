@@ -1,11 +1,11 @@
 "use client";
 
-import AuthView from "@/components/views/AuthView";
-import LandingView from "@/components/views/LandingView";
-import LeaderboardView from "@/components/views/LeaderboardView";
-import LobbyView from "@/components/views/LobbyView";
-import RoomView from "@/components/views/RoomView";
-import WerewolfBackground from "@/components/WerewolfBackground";
+import AuthView from "@/components/auth/auth-view";
+import LandingView from "@/components/home/landing-view";
+import LeaderboardView from "@/components/leaderboard/leaderboard-view";
+import LobbyView from "@/components/lobby/lobby-view";
+import RoomView from "@/components/room/room-view";
+import WerewolfBackground from "@/components/layout/werewolf-background";
 import { useGameStore } from "@/lib/store/useGameStore";
 
 export default function Home() {

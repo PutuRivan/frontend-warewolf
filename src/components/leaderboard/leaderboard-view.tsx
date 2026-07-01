@@ -3,7 +3,7 @@
 import { ChevronLeft, Star, Trophy } from "lucide-react";
 import React from "react";
 import { useGameStore } from "@/lib/store/useGameStore";
-import GlassPanel from "../GlassPanel";
+import GlassPanel from "@/components/ui/glass-panel";
 
 interface RankItem {
   rank: number;

@@ -13,7 +13,7 @@ import {
 import type React from "react";
 import { useState } from "react";
 import { useGameStore } from "@/lib/store/useGameStore";
-import GlassPanel from "../GlassPanel";
+import GlassPanel from "@/components/ui/glass-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 

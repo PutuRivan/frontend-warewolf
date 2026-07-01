@@ -1,7 +1,7 @@
 "use client";
 
 import { useGameStore } from "@/lib/store/useGameStore";
-import GlassPanel from "../GlassPanel";
+import GlassPanel from "@/components/ui/glass-panel";
 
 export default function LandingView() {
   const setView = useGameStore((state) => state.setView);
