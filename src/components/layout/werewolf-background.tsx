@@ -17,7 +17,7 @@ export default function WerewolfBackground({
   }, []);
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col justify-between overflow-hidden bg-gradient-to-b from-[#050508] via-[#0b0a14] to-[#120f26] font-sans">
+    <div suppressHydrationWarning={true} className="relative min-h-screen w-full flex flex-col justify-between overflow-hidden bg-gradient-to-b from-[#050508] via-[#0b0a14] to-[#120f26] font-sans">
       {/* 1. Starry Night Sky */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-950/20 via-transparent to-transparent opacity-70 pointer-events-none" />
 

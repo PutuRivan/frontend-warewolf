@@ -13,11 +13,12 @@ import {
 import type React from "react";
 import { useState } from "react";
 import { useGameStore } from "@/lib/store/useGameStore";
-import GlassPanel from "../GlassPanel";
+import GlassPanel from "@/components/ui/glass-panel";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 
 export default function AuthView() {
-  const login = useGameStore((state) => state.login);
-  const register = useGameStore((state) => state.register);
+  const { login, register } = useAuth()
   const setView = useGameStore((state) => state.setView);
   const authMode = useGameStore((state) => state.authMode);
   const setAuthMode = useGameStore((state) => state.setAuthMode);
@@ -28,19 +29,12 @@ export default function AuthView() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const router = useRouter()
 
-  const handleSubmit = (e: React.FormEvent) => {
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
-    if (!username.trim()) {
-      setError("Username cannot be empty");
-      return;
-    }
-    if (password.length < 4) {
-      setError("Password must be at least 4 characters");
-      return;
-    }
 
     if (authMode === "register") {
       if (!email.trim() || !email.includes("@")) {
@@ -51,9 +45,25 @@ export default function AuthView() {
         setError("Passwords do not match");
         return;
       }
-      register(username.trim(), email.trim());
+      try {
+        await register({ username: username.trim(), email: email.trim(), password });
+        setView("lobby");
+      } catch (err: any) {
+        setError(err.message || "Failed to join the pack. Try again.");
+      }
     } else {
-      login(username.trim());
+      try {
+        const success = await login({ email: email.trim(), password });
+        if (success === true) {
+          setView("lobby");
+        } else if (success instanceof Error) {
+          setError(success.message);
+        } else {
+          setError("Gagal login. Periksa kembali email dan password.");
+        }
+      } catch (err: any) {
+        setError(err.message || "User tidak ditemukan atau password salah!");
+      }
     }
   };
 
@@ -78,11 +88,10 @@ export default function AuthView() {
               setAuthMode("login");
               setError("");
             }}
-            className={`flex-1 text-center py-2 font-cinzel font-semibold tracking-wider transition-all cursor-pointer ${
-              authMode === "login"
-                ? "text-white text-shadow-glow border-b-2 border-purple-500"
-                : "text-zinc-500 hover:text-zinc-300"
-            }`}
+            className={`flex-1 text-center py-2 font-cinzel font-semibold tracking-wider transition-all cursor-pointer ${authMode === "login"
+              ? "text-white text-shadow-glow border-b-2 border-purple-500"
+              : "text-zinc-500 hover:text-zinc-300"
+              }`}
           >
             LOGIN
           </button>
@@ -92,11 +101,10 @@ export default function AuthView() {
               setAuthMode("register");
               setError("");
             }}
-            className={`flex-1 text-center py-2 font-cinzel font-semibold tracking-wider transition-all cursor-pointer ${
-              authMode === "register"
-                ? "text-white text-shadow-glow border-b-2 border-purple-500"
-                : "text-zinc-500 hover:text-zinc-300"
-            }`}
+            className={`flex-1 text-center py-2 font-cinzel font-semibold tracking-wider transition-all cursor-pointer ${authMode === "register"
+              ? "text-white text-shadow-glow border-b-2 border-purple-500"
+              : "text-zinc-500 hover:text-zinc-300"
+              }`}
           >
             REGISTER
           </button>
@@ -111,60 +119,60 @@ export default function AuthView() {
           )}
 
           {/* Username Input */}
-          <div className="space-y-2">
-            <label
-              htmlFor="username"
-              className="text-xs uppercase tracking-widest text-zinc-400 font-semibold block"
-            >
-              Pack Name (Username)
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
-                <User className="w-4 h-4" />
-              </span>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                className="
+          {authMode === "register" && (
+            <div className="space-y-2">
+              <label
+                htmlFor="username"
+                className="text-xs uppercase tracking-widest text-zinc-400 font-semibold block"
+              >
+                Pack Name (Username)
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
+                  <User className="w-4 h-4" />
+                </span>
+                <input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter username"
+                  className="
                   w-full bg-spooky-black/80 border border-purple-500/20 rounded-xl py-3.5 pl-11 pr-4 text-sm text-white placeholder-zinc-600
                   focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500
                   transition-all duration-200
                 "
-              />
-            </div>
-          </div>
-
-          {/* Email Input (Register Only) */}
-          {authMode === "register" && (
-            <div className="space-y-2 animate-slide-down">
-              <label
-                htmlFor="email"
-                className="text-xs uppercase tracking-widest text-zinc-400 font-semibold block"
-              >
-                Email Address
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
-                  <Mail className="w-4 h-4" />
-                </span>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter email address"
-                  className="
-                    w-full bg-spooky-black/80 border border-purple-500/20 rounded-xl py-3.5 pl-11 pr-4 text-sm text-white placeholder-zinc-600
-                    focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500
-                    transition-all duration-200
-                  "
                 />
               </div>
             </div>
           )}
+
+          {/* Email Input (Register Only) */}
+          <div className="space-y-2 animate-slide-down">
+            <label
+              htmlFor="email"
+              className="text-xs uppercase tracking-widest text-zinc-400 font-semibold block"
+            >
+              Email Address
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
+                <Mail className="w-4 h-4" />
+              </span>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter email address"
+                className="
+                    w-full bg-spooky-black/80 border border-purple-500/20 rounded-xl py-3.5 pl-11 pr-4 text-sm text-white placeholder-zinc-600
+                    focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500
+                    transition-all duration-200
+                  "
+              />
+            </div>
+          </div>
 
           {/* Password Input */}
           <div className="space-y-2">
