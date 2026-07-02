@@ -243,7 +243,7 @@ export default function RoomView() {
               <button
                 type="button"
                 disabled={isGamePlaying}
-                onClick={() => toggleReady(user.username)}
+                onClick={() => toggleReady()}
                 className={`
                   w-full py-3.5 rounded-xl font-cinzel font-bold tracking-widest text-sm transition-all duration-300 cursor-pointer
                   ${

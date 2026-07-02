@@ -8,6 +8,7 @@ export interface Player {
   level: number;
   is_host: boolean;
   is_alive: boolean;
+  is_ready: boolean;
   joined_at: string;
 }
 
@@ -79,4 +80,10 @@ export async function getPlayers(roomId: string): Promise<PlayersResponse> {
 
 export async function getActiveRoom(): Promise<RoomDetailResponse> {
   return request("/rooms/active");
+}
+
+export async function toggleReady(roomId: string): Promise<{ message: string; isReady: boolean }> {
+  return request(`/rooms/${roomId}/ready`, {
+    method: "PUT",
+  });
 }

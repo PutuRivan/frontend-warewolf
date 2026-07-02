@@ -72,7 +72,7 @@ interface GameStore {
   ) => Promise<{ success: boolean; message?: string }>;
   joinRoom: (code: string, password?: string) => Promise<{ success: boolean; message?: string }>;
   leaveRoom: () => Promise<void>;
-  toggleReady: (username: string) => void;
+  toggleReady: () => void;
   addMessage: (sender: string, text: string, chat_type: ChatType, createdAt?: string) => void;
   sendChatMessage: (message: string, chatType: ChatType) => Promise<void>;
   startGame: () => Promise<void>;
@@ -199,6 +199,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
       get().addMessage("System", "Nightfall has arrived. The village falls asleep...", "public");
     });
+
+    s.on("player_ready", (payload: any) => {
+      console.log("Player ready real-time:", payload);
+      const { userId, username, isReady } = payload.data || {};
+      console.log("player_ready userId:", userId, "isReady:", isReady);
+      if (!userId) {
+        console.warn("player_ready: userId is missing, skipping");
+        return;
+      }
+      set((state) => {
+        if (!state.room) {
+          console.warn("player_ready: state.room is null");
+          return {};
+        }
+        console.log("player_ready: current players:", state.room.players.map(p => ({ id: p.id, name: p.name, isReady: p.isReady })));
+        const updatedPlayers = state.room.players.map((p) =>
+          p.id === userId ? { ...p, isReady } : p
+        );
+        const matched = updatedPlayers.some((p, i) => p !== state.room!.players[i]);
+        console.log("player_ready: any player updated?", matched);
+        return { room: { ...state.room, players: updatedPlayers } };
+      });
+      get().addMessage(
+        "System",
+        `${username || "A player"} is ${isReady ? "READY" : "NOT READY"}.`,
+        "lobby"
+      );
+    });
   },
 
   refreshRoomPlayers: async (roomId) => {
@@ -208,7 +236,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         id: p.user_id,
         name: p.username,
         isHost: p.is_host,
-        isReady: p.is_host, // Host is implicitly ready
+        isReady: p.is_ready || p.is_host,
         isAlive: p.is_alive,
       }));
 
@@ -309,7 +337,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         id: p.user_id,
         name: p.username,
         isHost: p.is_host,
-        isReady: p.is_host,
+        isReady: p.is_ready || p.is_host,
         isAlive: p.is_alive,
       }));
 
@@ -369,29 +397,36 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  toggleReady: (username) => {
-    // Purely local UI feedback since backend does not track isReady in database
+  toggleReady: async () => {
     const room = get().room;
-    if (!room) return;
+    const user = get().user;
+    if (!room || !user) return;
 
-    const updatedPlayers = room.players.map((p) =>
-      p.name === username ? { ...p, isReady: !p.isReady } : p,
-    );
-
-    set({
-      room: {
-        ...room,
-        players: updatedPlayers,
-      },
+    // Optimistic update — flip ready state immediately for self
+    const prevPlayers = room.players;
+    const myCurrentReady = room.players.find((p) => p.id === user.id)?.isReady ?? false;
+    set((state) => {
+      if (!state.room) return {};
+      return {
+        room: {
+          ...state.room,
+          players: state.room.players.map((p) =>
+            p.id === user.id ? { ...p, isReady: !myCurrentReady } : p
+          ),
+        },
+      };
     });
 
-    const player = updatedPlayers.find((p) => p.name === username);
-    if (player) {
-      get().addMessage(
-        "System",
-        `${player.name} is ${player.isReady ? "READY" : "NOT READY"}.`,
-        room.status === "waiting" ? "lobby" : "public",
-      );
+    try {
+      await roomService.toggleReady(room.id);
+      // Real-time update for other players will arrive via socket player_ready event
+    } catch (err) {
+      console.error("Toggle ready failed:", err);
+      // Rollback on error
+      set((state) => {
+        if (!state.room) return {};
+        return { room: { ...state.room, players: prevPlayers } };
+      });
     }
   },
 
