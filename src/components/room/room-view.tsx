@@ -29,7 +29,7 @@ export default function RoomView() {
   const messages = useGameStore((state) => state.messages);
   const leaveRoom = useGameStore((state) => state.leaveRoom);
   const toggleReady = useGameStore((state) => state.toggleReady);
-  const addMockMessage = useGameStore((state) => state.addMockMessage);
+  const sendChatMessage = useGameStore((state) => state.sendChatMessage);
   const startGame = useGameStore((state) => state.startGame);
 
   const [chatInput, setChatInput] = useState("");
@@ -60,41 +60,14 @@ export default function RoomView() {
 
   const isHost = room.hostId === user.id;
   const myPlayer = room.players.find((p) => p.name === user.username);
-  const isAllReady = room.players.every((p) => p.isReady || p.isHost);
+  const isAllReady = room.players.length >= 4;
   const isGamePlaying = room.status === "playing";
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    addMockMessage(user.username, chatInput.trim(), activeChatTab);
+    sendChatMessage(chatInput.trim(), activeChatTab);
     setChatInput("");
-
-    // Simulate automatic responses from other players in the room!
-    if (activeChatTab === "lobby") {
-      setTimeout(() => {
-        addMockMessage(
-          "ShadowHunter",
-          "Let's start soon, ready to hunt!",
-          "lobby",
-        );
-      }, 1000);
-    } else if (activeChatTab === "public") {
-      setTimeout(() => {
-        addMockMessage(
-          "Alchemist_99",
-          "I suspect WolfBane is acting very quiet...",
-          "public",
-        );
-      }, 1500);
-    } else if (activeChatTab === "werewolf") {
-      setTimeout(() => {
-        addMockMessage(
-          "WolfBane",
-          "Nice! Let's eliminate Alchemist_99 tonight.",
-          "werewolf",
-        );
-      }, 1200);
-    }
   };
 
   const handleStartGame = () => {

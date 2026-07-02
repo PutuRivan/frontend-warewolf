@@ -44,9 +44,11 @@ export default function LobbyView() {
   const [createError, setCreateError] = useState("");
   const [showConfig, setShowConfig] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setJoinError("");
 
     if (!roomCode.trim()) {
@@ -54,14 +56,22 @@ export default function LobbyView() {
       return;
     }
 
-    const res = joinRoom(roomCode);
-    if (!res.success) {
-      setJoinError(res.message || "Failed to join room");
+    setIsSubmitting(true);
+    try {
+      const res = await joinRoom(roomCode.trim(), isPrivate ? roomPassword.trim() : undefined);
+      if (!res.success) {
+        setJoinError(res.message || "Failed to join room");
+      }
+    } catch (err: any) {
+      setJoinError(err.message || "An unexpected error occurred");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setCreateError("");
 
     if (!roomName.trim()) {
@@ -73,12 +83,22 @@ export default function LobbyView() {
       return;
     }
 
-    createRoom(
-      roomName.trim(),
-      maxPlayers,
-      isPrivate,
-      isPrivate ? roomPassword.trim() : undefined,
-    );
+    setIsSubmitting(true);
+    try {
+      const res = await createRoom(
+        roomName.trim(),
+        maxPlayers,
+        isPrivate,
+        isPrivate ? roomPassword.trim() : undefined,
+      );
+      if (!res.success) {
+        setCreateError(res.message || "Failed to create room");
+      }
+    } catch (err: any) {
+      setCreateError(err.message || "An unexpected error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
