@@ -56,7 +56,7 @@ export function clearRefreshToken() {
 export async function request(
   endpoint: string,
   options: RequestInit = {}
-) {
+): Promise<any> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -66,10 +66,38 @@ export async function request(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
+  let response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers,
   });
+
+  // Handle Token Expiry & Auto-Refresh
+  if (
+    response.status === 401 &&
+    endpoint !== "/auth/signin" &&
+    endpoint !== "/auth/signup" &&
+    endpoint !== "/auth/refresh"
+  ) {
+    console.log("Access token expired (401), attempting token refresh...");
+    try {
+      const newAccessToken = await refresh();
+      if (newAccessToken) {
+        headers.Authorization = `Bearer ${newAccessToken}`;
+        // Retry the original request
+        response = await fetch(`${API_URL}${endpoint}`, {
+          ...options,
+          headers,
+        });
+      }
+    } catch (refreshErr) {
+      console.error("Token refresh failed, logging out:", refreshErr);
+      clearAccessToken();
+      clearRefreshToken();
+      if (typeof window !== "undefined") {
+        window.location.reload();
+      }
+    }
+  }
 
   const data = await response.json();
 

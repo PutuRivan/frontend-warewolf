@@ -3,6 +3,7 @@ import * as authService from "@/lib/api/auth.service";
 import * as roomService from "@/lib/api/room.service";
 import * as chatService from "@/lib/api/chat.service";
 import * as gameService from "@/lib/api/game.service";
+import * as voteService from "@/lib/api/vote.service";
 import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
@@ -33,6 +34,24 @@ export interface RoomState {
   totalPlayer: number;
 }
 
+export interface GameRole {
+  roleName: string;
+  team: string;
+  teammates?: { userId: string; username: string }[];
+}
+
+export interface GamePlayState {
+  id: string;
+  day: number;
+  phase: "night" | "discussion" | "voting" | "finished";
+  phaseEndTime: number | null;
+  myRole: GameRole | null;
+  submittedAction: boolean;
+  votes: { targetId: string; voterId: string; voterUsername: string }[];
+  results: any[] | null;
+  players: { userId: string; username: string; avatar: string | null; isAlive: boolean; roleName?: string; team?: string }[];
+}
+
 export interface UserState {
   id: string;
   username: string;
@@ -57,6 +76,7 @@ interface GameStore {
   authMode: AuthModeType;
   room: RoomState | null;
   messages: Message[];
+  game: GamePlayState | null;
 
   // Actions
   setView: (view: ViewType) => void;
@@ -78,6 +98,12 @@ interface GameStore {
   startGame: () => Promise<void>;
   connectSocket: (roomId: string, token: string) => void;
   refreshRoomPlayers: (roomId: string) => Promise<void>;
+  fetchGameState: (gameId: string) => Promise<void>;
+  fetchActiveGame: (roomId: string) => Promise<void>;
+  fetchMyRole: (gameId: string) => Promise<void>;
+  submitNightAction: (targetId: string, actionType: string) => Promise<void>;
+  submitVote: (targetId: string) => Promise<void>;
+  fetchGameResults: (gameId: string) => Promise<void>;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -86,6 +112,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   authMode: "login",
   room: null,
   messages: [],
+  game: null,
 
   setView: (view) => set({ view }),
   setAuthMode: (authMode) => set({ authMode }),
@@ -134,6 +161,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       view: "landing",
       room: null,
       messages: [],
+      game: null,
     });
   },
 
@@ -186,18 +214,136 @@ export const useGameStore = create<GameStore>((set, get) => ({
       );
     });
 
-    s.on("game_started", (payload: any) => {
+    s.on("game_started", async (payload: any) => {
       console.log("Game started real-time:", payload);
+      const gameId = payload.data?.gameId;
       set((state) => {
         if (!state.room) return {};
         return {
           room: {
             ...state.room,
             status: "playing"
+          },
+          game: {
+            id: gameId || "",
+            day: 1,
+            phase: "night",
+            phaseEndTime: Date.now() + 30 * 1000,
+            myRole: null,
+            submittedAction: false,
+            votes: [],
+            results: null,
+            players: [],
           }
         };
       });
       get().addMessage("System", "Nightfall has arrived. The village falls asleep...", "public");
+
+      if (gameId) {
+        console.log("Emitting join_game on game_started for gameId:", gameId);
+        s.emit("join_game", { gameId, channels: [] });
+
+        await get().fetchGameState(gameId);
+        await get().fetchMyRole(gameId);
+      }
+    });
+
+    s.on("role_assigned", async (payload: any) => {
+      console.log("Role assigned real-time:", payload);
+      const gameId = get().game?.id;
+      if (gameId) {
+        await get().fetchMyRole(gameId);
+      }
+    });
+
+    s.on("phase_changed", async (payload: any) => {
+      console.log("Phase changed real-time:", payload);
+      const { gameId, phase, currentDay, phaseEndTime } = payload.data || {};
+      
+      set((state) => {
+        if (!state.game) return {};
+        return {
+          game: {
+            ...state.game,
+            id: gameId || state.game.id,
+            day: currentDay || state.game.day,
+            phase: phase || state.game.phase,
+            phaseEndTime: phaseEndTime || state.game.phaseEndTime,
+            submittedAction: false,
+            votes: [],
+          }
+        };
+      });
+
+      const phaseText = phase === "night" 
+        ? "Night has arrived. The village falls asleep." 
+        : phase === "voting" 
+          ? "Voting time. Select who is the werewolf." 
+          : "Discussion time. Find the werewolf.";
+      
+      get().addMessage("System", phaseText, "public");
+
+      if (gameId) {
+        await get().fetchGameState(gameId);
+      }
+    });
+
+    s.on("player_died", async (payload: any) => {
+      console.log("Player died real-time:", payload);
+      const { deaths } = payload.data || {};
+      if (deaths && deaths.length > 0) {
+        for (const dead of deaths) {
+          const username = dead.username || "A player";
+          get().addMessage("System", `${username} was found dead.`, "public");
+        }
+      }
+      const gameId = get().game?.id;
+      if (gameId) {
+        await get().fetchGameState(gameId);
+      }
+    });
+
+    s.on("winner", async (payload: any) => {
+      console.log("Game finished real-time:", payload);
+      const { gameId, winner } = payload.data || {};
+      
+      set((state) => {
+        if (!state.game) return {};
+        return {
+          game: {
+            ...state.game,
+            phase: "finished",
+          },
+          room: state.room ? { ...state.room, status: "finished" } : null
+        };
+      });
+
+      get().addMessage("System", `Game Over! The winners are: ${winner.toUpperCase()}`, "public");
+
+      if (gameId) {
+        await get().fetchGameResults(gameId);
+      }
+    });
+
+    s.on("vote_update", (payload: any) => {
+      console.log("Vote update real-time:", payload);
+      const { votes } = payload.data || {};
+      if (votes) {
+        set((state) => {
+          if (!state.game) return {};
+          const mappedVotes = votes.map((v: any) => ({
+            targetId: v.target_id,
+            voterId: v.voter_id,
+            voterUsername: v.voter_username || "A player",
+          }));
+          return {
+            game: {
+              ...state.game,
+              votes: mappedVotes,
+            }
+          };
+        });
+      }
     });
 
     s.on("player_ready", (payload: any) => {
@@ -299,6 +445,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         },
         messages: [],
         view: "room",
+        game: null,
       });
 
       const token = authService.getAccessToken();
@@ -359,6 +506,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         },
         messages: [],
         view: "room",
+        game: null,
       });
 
       const token = authService.getAccessToken();
@@ -394,6 +542,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       room: null,
       messages: [],
       view: "lobby",
+      game: null,
     });
   },
 
@@ -433,8 +582,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   sendChatMessage: async (message, chatType) => {
     const room = get().room;
     if (!room) return;
+    const game = get().game;
+    const gameId = game ? game.id : null;
     try {
-      await chatService.sendChatMessage(room.id, null, chatType, message);
+      await chatService.sendChatMessage(room.id, gameId, chatType, message);
     } catch (err) {
       console.error("Failed to send chat message:", err);
     }
@@ -465,6 +616,161 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } catch (err: any) {
       console.error("Start Game failed:", err);
       get().addMessage("System", `Gagal memulai game: ${err.message || "Server Error"}`, "lobby");
+    }
+  },
+
+  fetchGameState: async (gameId) => {
+    try {
+      const stateResponse = await gameService.getGameState(gameId);
+      const playersResponse = await gameService.getPlayers(gameId);
+
+      set((state) => {
+        if (!state.game) return {};
+        
+        const mappedPlayers = playersResponse.players.map((p: any) => ({
+          userId: p.userId,
+          username: p.username,
+          avatar: p.avatar,
+          isAlive: p.isAlive,
+          roleName: p.roleName,
+          team: p.team,
+        }));
+
+        return {
+          game: {
+            ...state.game,
+            day: stateResponse.game.current_day,
+            phase: stateResponse.game.phase,
+            phaseEndTime: stateResponse.phaseEndTime,
+            players: mappedPlayers,
+          }
+        };
+      });
+    } catch (err) {
+      console.error("Failed to fetch game state:", err);
+    }
+  },
+
+  fetchMyRole: async (gameId) => {
+    try {
+      const response = await gameService.getMyRole(gameId);
+      set((state) => {
+        if (!state.game) return {};
+        return {
+          game: {
+            ...state.game,
+            myRole: response.role,
+          }
+        };
+      });
+
+      // Join game socket channels (especially werewolf channel)
+      if (socket) {
+        const channels: string[] = [];
+        if (response.role?.roleName === "Werewolf") {
+          channels.push("werewolf");
+        }
+        console.log("Emitting join_game with channels:", channels);
+        socket.emit("join_game", { gameId, channels });
+      }
+    } catch (err) {
+      console.error("Failed to fetch my role:", err);
+    }
+  },
+
+  fetchActiveGame: async (roomId) => {
+    try {
+      const response = await gameService.getActiveGame(roomId);
+      const gameId = response.gameId;
+      if (gameId) {
+        set((state) => {
+          if (state.game) return {};
+          return {
+            game: {
+              id: gameId,
+              day: response.game?.current_day || 1,
+              phase: response.game?.phase || "night",
+              phaseEndTime: null,
+              myRole: null,
+              submittedAction: false,
+              votes: [],
+              results: null,
+              players: [],
+            }
+          };
+        });
+
+        if (socket) {
+          console.log("Emitting join_game on active game recovery for gameId:", gameId);
+          socket.emit("join_game", { gameId, channels: [] });
+        }
+
+        await get().fetchGameState(gameId);
+        await get().fetchMyRole(gameId);
+      }
+    } catch (err) {
+      console.error("Failed to fetch active game:", err);
+    }
+  },
+
+  submitNightAction: async (targetId, actionType) => {
+    const game = get().game;
+    if (!game) return;
+
+    try {
+      await gameService.submitNightAction(game.id, targetId, actionType);
+      set((state) => {
+        if (!state.game) return {};
+        return {
+          game: {
+            ...state.game,
+            submittedAction: true,
+          }
+        };
+      });
+      get().addMessage("System", `Aksi malam telah disubmit.`, "public");
+    } catch (err: any) {
+      console.error("Failed to submit night action:", err);
+      get().addMessage("System", `Aksi gagal: ${err.message || "Server Error"}`, "public");
+    }
+  },
+
+  submitVote: async (targetId) => {
+    const game = get().game;
+    if (!game) return;
+
+    try {
+      await voteService.submitVote(game.id, targetId);
+      set((state) => {
+        if (!state.game) return {};
+        return {
+          game: {
+            ...state.game,
+            submittedAction: true,
+          }
+        };
+      });
+      get().addMessage("System", `Vote telah disubmit.`, "public");
+    } catch (err: any) {
+      console.error("Failed to submit vote:", err);
+      get().addMessage("System", `Vote gagal: ${err.message || "Server Error"}`, "public");
+    }
+  },
+
+  fetchGameResults: async (gameId) => {
+    try {
+      const response = await gameService.getGameResults(gameId);
+      set((state) => {
+        if (!state.game) return {};
+        return {
+          game: {
+            ...state.game,
+            results: response.results,
+          }
+        };
+      });
+    } catch (err) {
+      console.error("Failed to fetch game results:", err);
     }
   },
 }));
