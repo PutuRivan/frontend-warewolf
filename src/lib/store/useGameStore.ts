@@ -1,21 +1,28 @@
 import { create } from "zustand";
+import * as authService from "@/lib/api/auth.service";
+import * as roomService from "@/lib/api/room.service";
+import * as chatService from "@/lib/api/chat.service";
+import * as gameService from "@/lib/api/game.service";
+import { io, Socket } from "socket.io-client";
+
+let socket: Socket | null = null;
 
 export type ViewType = "landing" | "auth" | "lobby" | "room" | "leaderboard";
 export type AuthModeType = "login" | "register";
 export type ChatType = "lobby" | "public" | "werewolf" | "dead";
 
 export interface Player {
-  id: string; // uuid
-  name: string;
+  id: string; // user_id
+  name: string; // username
   isHost: boolean;
   isReady: boolean;
   isAlive: boolean;
 }
 
 export interface RoomState {
-  id: string; // uuid
-  code: string; // room_code
-  name: string; // room_name
+  id: string;
+  code: string;
+  name: string;
   hostId: string;
   hostName: string;
   maxPlayers: number;
@@ -62,12 +69,15 @@ interface GameStore {
     maxPlayers: number,
     isPrivate: boolean,
     password?: string,
-  ) => void;
-  joinRoom: (code: string) => { success: boolean; message?: string };
-  leaveRoom: () => void;
+  ) => Promise<{ success: boolean; message?: string }>;
+  joinRoom: (code: string, password?: string) => Promise<{ success: boolean; message?: string }>;
+  leaveRoom: () => Promise<void>;
   toggleReady: (username: string) => void;
-  addMockMessage: (sender: string, text: string, chat_type: ChatType) => void;
-  startGame: () => void;
+  addMessage: (sender: string, text: string, chat_type: ChatType, createdAt?: string) => void;
+  sendChatMessage: (message: string, chatType: ChatType) => Promise<void>;
+  startGame: () => Promise<void>;
+  connectSocket: (roomId: string, token: string) => void;
+  refreshRoomPlayers: (roomId: string) => Promise<void>;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -81,14 +91,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setAuthMode: (authMode) => set({ authMode }),
 
   login: (username) => {
+    // Left for compatibility with local mock, normally handled by AuthProvider
     set({
       user: {
         id: "mock-user-id-1",
         username,
         email: `${username.toLowerCase()}@mail.com`,
         token: "mock-jwt-token",
-        point: 500, // matches default in Table-Database.md
-        coin: 0, // matches default in Table-Database.md
+        point: 500,
+        coin: 0,
         level: 1,
         exp: 0,
       },
@@ -97,6 +108,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   register: (username, email) => {
+    // Left for compatibility with local mock
     set({
       user: {
         id: "mock-user-id-1",
@@ -113,6 +125,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   logout: () => {
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
     set({
       user: null,
       view: "landing",
@@ -121,85 +137,157 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  createRoom: (name, maxPlayers, isPrivate, password) => {
-    const user = get().user;
-    if (!user) return;
+  connectSocket: (roomId, token) => {
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3007";
+    const s = io(socketUrl, {
+      auth: { token },
+      transports: ["websocket"],
+      forceNew: true,
+    });
+    socket = s;
 
-    const mockRoomId = "mock-room-uuid";
-    const mockCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-    const hostPlayer: Player = {
-      id: user.id,
-      name: user.username,
-      isHost: true,
-      isReady: true,
-      isAlive: true,
+    const handleJoin = () => {
+      console.log("Connected to socket-service, emitting join_room with roomId:", roomId);
+      s.emit("join_room", { roomId });
     };
 
-    const mockPlayers: Player[] = [
-      hostPlayer,
-      {
-        id: "mock-user-id-2",
-        name: "Alchemist_99",
-        isHost: false,
-        isReady: false,
-        isAlive: true,
-      },
-      {
-        id: "mock-user-id-3",
-        name: "ShadowHunter",
-        isHost: false,
-        isReady: true,
-        isAlive: true,
-      },
-      {
-        id: "mock-user-id-4",
-        name: "WolfBane",
-        isHost: false,
-        isReady: false,
-        isAlive: true,
-      },
-    ];
+    if (s.connected) {
+      handleJoin();
+    } else {
+      s.on("connect", handleJoin);
+    }
 
-    set({
-      room: {
-        id: mockRoomId,
-        code: mockCode,
-        name: name || `${user.username}'s Den`,
-        hostId: user.id,
-        hostName: user.username,
-        maxPlayers,
-        status: "waiting",
-        isPrivate,
-        password,
-        players: mockPlayers,
-        totalPlayer: mockPlayers.length,
-      },
-      messages: [
-        {
-          sender: "System",
-          text: `Room "${name || `${user.username}'s Den`}" (${mockCode}) created. Welcome to the Hunt.`,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          chat_type: "lobby",
-        },
-        {
-          sender: "ShadowHunter",
-          text: "Yo, ready to find some wolves!",
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          chat_type: "lobby",
-        },
-      ],
-      view: "room",
+    s.on("user_joined", async (payload: any) => {
+      console.log("Player joined real-time:", payload);
+      const username = payload.data?.username || "A player";
+      get().addMessage("System", `${username} has joined the den.`, "lobby");
+      await get().refreshRoomPlayers(roomId);
+    });
+
+    s.on("user_left", async (payload: any) => {
+      console.log("Player left real-time:", payload);
+      const username = payload.data?.username || "A player";
+      get().addMessage("System", `${username} has left the den.`, "lobby");
+      await get().refreshRoomPlayers(roomId);
+    });
+
+    s.on("new_chat", (payload: any) => {
+      console.log("Received new chat message:", payload);
+      const { senderUsername, message, chatType, createdAt } = payload.data || {};
+      get().addMessage(
+        senderUsername || "System",
+        message || "",
+        chatType || "lobby",
+        createdAt
+      );
+    });
+
+    s.on("game_started", (payload: any) => {
+      console.log("Game started real-time:", payload);
+      set((state) => {
+        if (!state.room) return {};
+        return {
+          room: {
+            ...state.room,
+            status: "playing"
+          }
+        };
+      });
+      get().addMessage("System", "Nightfall has arrived. The village falls asleep...", "public");
     });
   },
 
-  joinRoom: (code) => {
+  refreshRoomPlayers: async (roomId) => {
+    try {
+      const res = await roomService.getPlayers(roomId);
+      const mappedPlayers: Player[] = res.players.map((p) => ({
+        id: p.user_id,
+        name: p.username,
+        isHost: p.is_host,
+        isReady: p.is_host, // Host is implicitly ready
+        isAlive: p.is_alive,
+      }));
+
+      // Update room host info if it changed
+      const host = mappedPlayers.find((p) => p.isHost);
+      const hostName = host ? host.name : "Host";
+      const hostId = host ? host.id : "";
+
+      set((state) => {
+        if (!state.room) return {};
+        return {
+          room: {
+            ...state.room,
+            players: mappedPlayers,
+            totalPlayer: mappedPlayers.length,
+            hostId,
+            hostName,
+          }
+        };
+      });
+    } catch (err) {
+      console.error("Failed to refresh players:", err);
+    }
+  },
+
+  createRoom: async (name, maxPlayers, isPrivate, password) => {
+    const user = get().user;
+    if (!user) return { success: false, message: "User not logged in" };
+
+    try {
+      const response = await roomService.createRoom(
+        name || `${user.username}'s Den`,
+        maxPlayers,
+        isPrivate,
+        password
+      );
+
+      const roomData = response.room;
+
+      const hostPlayer: Player = {
+        id: user.id,
+        name: user.username,
+        isHost: true,
+        isReady: true,
+        isAlive: true,
+      };
+
+      set({
+        room: {
+          id: roomData.id,
+          code: roomData.room_code,
+          name: roomData.room_name,
+          hostId: roomData.host_id,
+          hostName: user.username,
+          maxPlayers: roomData.max_players,
+          status: roomData.status,
+          isPrivate: roomData.is_private,
+          players: [hostPlayer],
+          totalPlayer: 1,
+        },
+        messages: [],
+        view: "room",
+      });
+
+      const token = authService.getAccessToken();
+      if (token) {
+        get().connectSocket(roomData.id, token);
+      }
+
+      get().addMessage("System", `Room "${roomData.room_name}" created. Welcome to the Hunt.`, "lobby");
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Create Room failed:", err);
+      return { success: false, message: err.message || "Failed to create room" };
+    }
+  },
+
+  joinRoom: async (code, password) => {
     const user = get().user;
     if (!user) return { success: false, message: "User not logged in" };
 
@@ -211,79 +299,69 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
-    const joiningPlayer: Player = {
-      id: user.id,
-      name: user.username,
-      isHost: false,
-      isReady: false,
-      isAlive: true,
-    };
+    try {
+      const response = await roomService.joinRoom(cleanCode, password);
+      const roomData = response.room;
 
-    const mockPlayers: Player[] = [
-      {
-        id: "mock-user-id-5",
-        name: "VampireSlayer",
-        isHost: true,
-        isReady: true,
-        isAlive: true,
-      },
-      {
-        id: "mock-user-id-6",
-        name: "Moonlight_101",
-        isHost: false,
-        isReady: true,
-        isAlive: true,
-      },
-      joiningPlayer,
-      {
-        id: "mock-user-id-7",
-        name: "GhostWhisperer",
-        isHost: false,
-        isReady: false,
-        isAlive: true,
-      },
-    ];
+      // Fetch details to get players list
+      const detailResponse = await roomService.getRoomDetail(roomData.id);
+      const mappedPlayers: Player[] = detailResponse.players.map((p) => ({
+        id: p.user_id,
+        name: p.username,
+        isHost: p.is_host,
+        isReady: p.is_host,
+        isAlive: p.is_alive,
+      }));
 
-    set({
-      room: {
-        id: "mock-joined-room-id",
-        code: cleanCode,
-        name: "Gallows & Graves",
-        hostId: "mock-user-id-5",
-        hostName: "VampireSlayer",
-        maxPlayers: 8,
-        status: "waiting",
-        isPrivate: false,
-        players: mockPlayers,
-        totalPlayer: mockPlayers.length,
-      },
-      messages: [
-        {
-          sender: "System",
-          text: `Joined Room "Gallows & Graves" (${cleanCode}). Align with your pack.`,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          chat_type: "lobby",
+      const host = mappedPlayers.find((p) => p.isHost);
+      const hostName = host ? host.name : "Host";
+
+      set({
+        room: {
+          id: roomData.id,
+          code: roomData.room_code,
+          name: roomData.room_name,
+          hostId: roomData.host_id,
+          hostName,
+          maxPlayers: roomData.max_players,
+          status: roomData.status,
+          isPrivate: roomData.is_private,
+          players: mappedPlayers,
+          totalPlayer: mappedPlayers.length,
         },
-        {
-          sender: "VampireSlayer",
-          text: "Welcome to the room! Mark yourself ready.",
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          chat_type: "lobby",
-        },
-      ],
-      view: "room",
-    });
+        messages: [],
+        view: "room",
+      });
 
-    return { success: true };
+      const token = authService.getAccessToken();
+      if (token) {
+        get().connectSocket(roomData.id, token);
+      }
+
+      get().addMessage("System", `Joined Room "${roomData.room_name}" (${cleanCode}). Align with your pack.`, "lobby");
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Join Room failed:", err);
+      return { success: false, message: err.message || "Failed to join room" };
+    }
   },
 
-  leaveRoom: () => {
+  leaveRoom: async () => {
+    const room = get().room;
+    if (room) {
+      try {
+        await roomService.leaveRoom(room.id);
+      } catch (err) {
+        console.error("Leave room API failed:", err);
+      }
+    }
+
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
+
     set({
       room: null,
       messages: [],
@@ -292,6 +370,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   toggleReady: (username) => {
+    // Purely local UI feedback since backend does not track isReady in database
     const room = get().room;
     if (!room) return;
 
@@ -306,10 +385,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
     });
 
-    // Add a message about ready state toggle
     const player = updatedPlayers.find((p) => p.name === username);
     if (player) {
-      get().addMockMessage(
+      get().addMessage(
         "System",
         `${player.name} is ${player.isReady ? "READY" : "NOT READY"}.`,
         room.status === "waiting" ? "lobby" : "public",
@@ -317,14 +395,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
-  addMockMessage: (sender, text, chat_type) => {
+  sendChatMessage: async (message, chatType) => {
+    const room = get().room;
+    if (!room) return;
+    try {
+      await chatService.sendChatMessage(room.id, null, chatType, message);
+    } catch (err) {
+      console.error("Failed to send chat message:", err);
+    }
+  },
+
+  addMessage: (sender, text, chat_type, createdAt) => {
     set((state) => ({
       messages: [
         ...state.messages,
         {
           sender,
           text,
-          time: new Date().toLocaleTimeString([], {
+          time: new Date(createdAt || Date.now()).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
           }),
@@ -334,19 +422,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }));
   },
 
-  startGame: () => {
+  startGame: async () => {
     const room = get().room;
     if (!room) return;
-    set({
-      room: {
-        ...room,
-        status: "playing",
-      },
-    });
-    get().addMockMessage(
-      "System",
-      "Nightfall has arrived. The village falls asleep...",
-      "public",
-    );
+    try {
+      await gameService.startGame(room.id);
+    } catch (err: any) {
+      console.error("Start Game failed:", err);
+      get().addMessage("System", `Gagal memulai game: ${err.message || "Server Error"}`, "lobby");
+    }
   },
 }));

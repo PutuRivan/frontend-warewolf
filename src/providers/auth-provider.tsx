@@ -8,7 +8,8 @@ import {
 
 import { AuthContext, User, LoginData, RegisterData } from "../context/auth.context";
 import * as authService from "@/lib/api/auth.service";
-import { useGameStore } from "@/lib/store/useGameStore";
+import * as roomService from "@/lib/api/room.service";
+import { useGameStore, Player } from "@/lib/store/useGameStore";
 
 interface Props {
   children: ReactNode;
@@ -44,6 +45,49 @@ export default function AuthProvider({ children }: Props) {
     try {
       const me = await authService.getMe();
       setUser(me.user);
+
+      // Check if user is in an active room
+      try {
+        const activeRoomRes = await roomService.getActiveRoom();
+        if (activeRoomRes && activeRoomRes.room) {
+          const roomData = activeRoomRes.room;
+          const mappedPlayers: Player[] = activeRoomRes.players.map((p) => ({
+            id: p.user_id,
+            name: p.username,
+            isHost: p.is_host,
+            isReady: p.is_host,
+            isAlive: p.is_alive,
+          }));
+
+          const host = mappedPlayers.find((p) => p.isHost);
+          const hostName = host ? host.name : "Host";
+
+          useGameStore.setState({
+            room: {
+              id: roomData.id,
+              code: roomData.room_code,
+              name: roomData.room_name,
+              hostId: roomData.host_id,
+              hostName,
+              maxPlayers: roomData.max_players,
+              status: roomData.status,
+              isPrivate: roomData.is_private,
+              players: mappedPlayers,
+              totalPlayer: mappedPlayers.length,
+            },
+            view: "room",
+          });
+
+          // Connect Socket.io
+          const token = authService.getAccessToken();
+          if (token) {
+            useGameStore.getState().connectSocket(roomData.id, token);
+          }
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to check active room:", err);
+      }
 
       // Redirect to lobby if currently on landing/auth view
       const currentView = useGameStore.getState().view;
