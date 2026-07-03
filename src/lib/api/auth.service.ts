@@ -91,9 +91,11 @@ export async function request(
       }
     } catch (refreshErr) {
       console.error("Token refresh failed, logging out:", refreshErr);
+      const hadToken = typeof window !== "undefined" && 
+        (localStorage.getItem("access_token") || localStorage.getItem("refresh_token"));
       clearAccessToken();
       clearRefreshToken();
-      if (typeof window !== "undefined") {
+      if (hadToken && typeof window !== "undefined") {
         window.location.reload();
       }
     }

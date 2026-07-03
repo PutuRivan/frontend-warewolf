@@ -4,6 +4,7 @@ import * as roomService from "@/lib/api/room.service";
 import * as chatService from "@/lib/api/chat.service";
 import * as gameService from "@/lib/api/game.service";
 import * as voteService from "@/lib/api/vote.service";
+import * as userService from "@/lib/api/user.service";
 import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
@@ -27,11 +28,17 @@ export interface RoomState {
   hostId: string;
   hostName: string;
   maxPlayers: number;
-  status: "waiting" | "playing" | "finished";
+  status: string;
   isPrivate: boolean;
-  password?: string;
   players: Player[];
   totalPlayer: number;
+}
+
+export interface Message {
+  sender: string;
+  text: string;
+  time: string;
+  chat_type: ChatType | "system";
 }
 
 export interface GameRole {
@@ -57,25 +64,19 @@ export interface UserState {
   username: string;
   email: string;
   token: string;
+  avatar?: string | null;
   point: number;
   coin: number;
   level: number;
   exp: number;
 }
 
-export interface Message {
-  sender: string;
-  text: string;
-  time: string;
-  chat_type: ChatType;
-}
-
-interface GameStore {
+export interface GameStore {
   user: UserState | null;
-  view: ViewType;
-  authMode: AuthModeType;
   room: RoomState | null;
   messages: Message[];
+  view: ViewType;
+  authMode: AuthModeType;
   game: GamePlayState | null;
 
   // Actions
@@ -84,6 +85,8 @@ interface GameStore {
   login: (username: string) => void;
   register: (username: string, email: string) => void;
   logout: () => void;
+  updateProfile: (username: string) => Promise<{ success: boolean; message?: string }>;
+  updateAvatar: (avatar: string) => Promise<{ success: boolean; message?: string }>;
   createRoom: (
     name: string,
     maxPlayers: number,
@@ -163,6 +166,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
       messages: [],
       game: null,
     });
+  },
+
+  updateProfile: async (username) => {
+    try {
+      const res = await userService.updateProfile(username);
+      set((state) => {
+        if (!state.user) return {};
+        return {
+          user: {
+            ...state.user,
+            username: res.user.username,
+          },
+        };
+      });
+      return { success: true };
+    } catch (err: any) {
+      console.error("updateProfile store failed:", err);
+      return { success: false, message: err.message || "Failed to update profile" };
+    }
+  },
+
+  updateAvatar: async (avatar) => {
+    try {
+      const res = await userService.updateAvatar(avatar);
+      set((state) => {
+        if (!state.user) return {};
+        return {
+          user: {
+            ...state.user,
+            avatar: res.user.avatar,
+          },
+        };
+      });
+      return { success: true };
+    } catch (err: any) {
+      console.error("updateAvatar store failed:", err);
+      return { success: false, message: err.message || "Failed to update avatar" };
+    }
   },
 
   connectSocket: (roomId, token) => {

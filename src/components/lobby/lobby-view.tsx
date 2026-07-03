@@ -16,6 +16,7 @@ import {
   Trophy,
   LogOut,
   ShieldAlert,
+  Pencil,
 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
@@ -45,6 +46,58 @@ export default function LobbyView() {
   const [showConfig, setShowConfig] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Profile Edit State
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editUsername, setEditUsername] = useState("");
+  const [selectedAvatar, setSelectedAvatar] = useState("🐺");
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
+  const updateProfile = useGameStore((state) => state.updateProfile);
+  const updateAvatar = useGameStore((state) => state.updateAvatar);
+
+  const AVATAR_OPTIONS = ["🐺", "🧙‍♂️", "🧛", "🧟", "💀", "🛡️", "🦉", "🦇"];
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditError("");
+    setEditSuccess("");
+    if (!editUsername.trim()) {
+      setEditError("Username cannot be empty");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (editUsername.trim() !== user?.username) {
+        const res = await updateProfile(editUsername.trim());
+        if (!res.success) {
+          setEditError(res.message || "Failed to update username");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      if (selectedAvatar !== user?.avatar) {
+        const res = await updateAvatar(selectedAvatar);
+        if (!res.success) {
+          setEditError(res.message || "Failed to update avatar");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      setEditSuccess("Identity successfully updated!");
+      setTimeout(() => {
+        setShowEditProfile(false);
+        setEditSuccess("");
+      }, 1200);
+    } catch (err: any) {
+      setEditError(err.message || "An unexpected error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,13 +197,27 @@ export default function LobbyView() {
           <div className="space-y-6">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-indigo-950 border border-purple-400/40 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(168,85,247,0.3)] select-none">
-                🐺
+                {user?.avatar || "🐺"}
               </div>
-              <div>
-                <h3 className="font-bold text-white text-lg tracking-wide">
-                  {user?.username}
-                </h3>
-                <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-[10px] text-purple-400 font-semibold tracking-wider uppercase">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-white text-lg tracking-wide truncate max-w-[130px]">
+                    {user?.username}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditUsername(user?.username || "");
+                      setSelectedAvatar(user?.avatar || "🐺");
+                      setShowEditProfile(true);
+                    }}
+                    className="text-zinc-500 hover:text-purple-400 transition-colors p-1 rounded hover:bg-purple-500/10 cursor-pointer shrink-0"
+                    title="Edit Profile"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-[10px] text-purple-400 font-semibold tracking-wider uppercase mt-1">
                   Level {user?.level}
                 </span>
               </div>
@@ -507,6 +574,99 @@ export default function LobbyView() {
                   Exit
                 </button>
               </div>
+            </GlassPanel>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Edit Modal */}
+      {showEditProfile && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-scale-up">
+          <div className="max-w-md w-full animate-duration-200">
+            <GlassPanel className="border-purple-500/35 p-6 bg-gradient-to-b from-spooky-black to-purple-950/10 space-y-6">
+              <div>
+                <h3 className="font-cinzel font-bold text-xl text-white tracking-widest border-b border-purple-500/10 pb-3 uppercase">
+                  Edit Forest Identity
+                </h3>
+                <p className="text-zinc-400 text-xs mt-1">
+                  Change your username or select a new avatar emoji.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveProfile} className="space-y-5">
+                {editError && (
+                  <div className="bg-werewolf-red/10 border border-werewolf-red/30 text-werewolf-red text-xs p-2.5 rounded-lg text-center font-medium animate-pulse">
+                    ⚠️ {editError}
+                  </div>
+                )}
+                {editSuccess && (
+                  <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs p-2.5 rounded-lg text-center font-medium">
+                    ✓ {editSuccess}
+                  </div>
+                )}
+
+                {/* Username Input */}
+                <div className="space-y-1.5">
+                  <label htmlFor="edit-username-input" className="text-xs text-zinc-400 uppercase font-semibold tracking-wider block">
+                    Username
+                  </label>
+                  <input
+                    id="edit-username-input"
+                    type="text"
+                    value={editUsername}
+                    onChange={(e) => setEditUsername(e.target.value)}
+                    placeholder="Enter Username"
+                    maxLength={15}
+                    className="
+                      w-full bg-spooky-black/80 border border-purple-500/20 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600
+                      focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500
+                    "
+                  />
+                </div>
+
+                {/* Avatar Selection Grid */}
+                <div className="space-y-2">
+                  <span className="text-xs text-zinc-400 uppercase font-semibold tracking-wider block">
+                    Choose Avatar Emoji
+                  </span>
+                  <div className="grid grid-cols-4 gap-3">
+                    {AVATAR_OPTIONS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setSelectedAvatar(emoji)}
+                        className={`
+                          h-12 w-full rounded-xl text-2xl flex items-center justify-center transition-all duration-200 cursor-pointer
+                          ${
+                            selectedAvatar === emoji
+                              ? "bg-purple-500/20 border-2 border-werewolf-gold shadow-[0_0_10px_rgba(212,175,55,0.4)]"
+                              : "bg-spooky-black/60 border border-purple-500/10 hover:border-purple-500/35 hover:bg-spooky-black/85"
+                          }
+                        `}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditProfile(false)}
+                    className="flex-1 py-3 rounded-xl border border-zinc-700/80 bg-zinc-800/20 text-zinc-400 hover:text-white hover:bg-zinc-800/40 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 py-3 rounded-xl border border-purple-500/35 bg-purple-500/10 text-purple-300 hover:bg-purple-500/25 hover:border-purple-400 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    Save
+                  </button>
+                </div>
+              </form>
             </GlassPanel>
           </div>
         </div>
